@@ -1,0 +1,6 @@
+{
+  "name": "emudhra-ca-remediation",
+  "description": "Find and patch every system exposed to the October 2026 eMudhra/emSign intermediate CA compromise, across the code you write, the systems you run and the software you ship to others, and prove the deployed artifact is safe, not just the repo.",
+  "author": { "name": "Ode with Anthropic" },
+  "license": "MIT"
+}
