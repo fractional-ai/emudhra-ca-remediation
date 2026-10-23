@@ -186,6 +186,9 @@ class KeychainPems(Tmp):
         self.write("deny/old.pem", pem(CLEAN))
         self.assertEqual(run("emudhra_certs.py", "--keychain-pems", out, os.path.join(self.dir, "c.pem"))[0], 2)
         self.assertEqual(run("emudhra_certs.py")[0], 2)
+        code, out = run("emudhra_certs.py", "--keychain-pems", os.path.join(self.dir, "c.pem", "x"), out)
+        self.assertEqual(code, 2, out)
+        self.assertNotIn("Traceback", out)
 
 
 class TrustStore(Tmp):
@@ -665,6 +668,19 @@ class CheckAdvisory(unittest.TestCase):
         self.assertEqual(C.unknown_certificates(feed), [])
         feed["roots.json"].append({"name": "new", "pem": pem([CLEAN[0]]).decode()})
         self.assertEqual(len(C.unknown_certificates(feed)), 1)
+
+    def test_new_issuance_of_a_known_key(self):
+        import check_advisory as C
+        real = dict(E.KEYCHAIN_DENY)
+        self.addCleanup(lambda: (E.KEYCHAIN_DENY.clear(), E.KEYCHAIN_DENY.update(real)))
+        E.KEYCHAIN_DENY.clear()
+        E.KEYCHAIN_DENY[E.cert_sha256(BAD_ROOT)] = "root"
+        feed = {"roots.json": [{"name": "pinned", "pem": pem([BAD_ROOT]).decode()},
+                               {"name": "aaa", "pem": pem([AAA_ROOT]).decode()}]}
+        self.assertEqual(C.unpinned_issuances(feed), [])
+        feed["roots.json"].append({"name": "cross-sign", "pem": pem([BAD_INT]).decode()})
+        self.assertEqual(len(C.unpinned_issuances(feed)), 1)
+        self.assertEqual(C.unknown_certificates(feed), [])
 
 
 def free_port():

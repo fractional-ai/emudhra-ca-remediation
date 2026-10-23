@@ -380,11 +380,11 @@ def main(argv):
         print("usage: emudhra_certs.py --keychain-pems OUT_DIR FILE [FILE ...]", file=sys.stderr)
         return 2
     out_dir, sources = argv[1], argv[2:]
-    os.makedirs(out_dir, exist_ok=True)
-    if os.listdir(out_dir):
-        print("ERROR      %s is not empty; use a new directory" % out_dir)
-        return 2
     try:
+        os.makedirs(out_dir, exist_ok=True)
+        if os.listdir(out_dir):
+            print("ERROR      %s is not empty; use a new directory" % out_dir)
+            return 2
         missing = keychain_pems(out_dir, sources)
     except (OSError, DERError) as e:
         print("ERROR      %s" % e)

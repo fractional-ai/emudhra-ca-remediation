@@ -159,8 +159,8 @@ deploy decision for the project owner, not a scan fix.
    `requests.get` (certifi) and `urllib.request` (`ssl`), and report both.
 3. Delete the route and the preview. Production deployments built before the
    platform shipped its patch keep the old runtime until a redeploy, so redeploy
-   production and probe again, with the project owner's go-ahead if it is not
-   yours.
+   production and probe again, once the person you are working for says go
+   (and the project's owner too, if that is someone else).
 
 If the runtime fails and can't be upgraded yet, ship the Node stopgap in
 `remediation.md` (drop the affected roots at startup), probe again, and record

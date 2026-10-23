@@ -629,11 +629,13 @@ def main():
                     raise StoreError("some affected entries have no alias keytool can delete; fix this store by hand "
                                      "and run this check again")
                 saved = None if opts["--no-backup"] else backup(path)
-                delete_entries(path, sorted({x["entry"] for x in row["affected"]}))
-                again, _ = check(path, root)
-                left = [x for x in again if x[2] and E.classify(x[0])[0]]
-                if left:
-                    raise StoreError("affected entries remain after --delete")
+                try:
+                    delete_entries(path, sorted({x["entry"] for x in row["affected"]}))
+                    again, _ = check(path, root)
+                    if [x for x in again if x[2] and E.classify(x[0])[0]]:
+                        raise StoreError("affected entries remain after --delete")
+                except StoreError as e:
+                    raise StoreError("%s%s" % (e, "; the store before --delete is at " + saved if saved else ""))
                 row["detail"] = "deleted: " + ", ".join(sorted({x["entry"] for x in row["affected"]}))
                 if saved:
                     row["detail"] += "; backup at " + saved

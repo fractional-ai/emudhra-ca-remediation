@@ -427,7 +427,7 @@ One PR per repo. In it:
   26.2.2 trusts its certifi and the OS store both. An upgrade line for either is
   temporary until the image ships them. For a vendor JDK image with no patched
   release, remove the roots with
-  `trust_store.py --delete "$JAVA_HOME/lib/security/cacerts"` (temporary).
+  `trust_store.py --delete --no-backup "$JAVA_HOME/lib/security/cacerts"` (temporary).
 - Bump digest-pinned base images to a digest built after the fix. `-slim` and other
   codename-less tags moved to Debian trixie and break apt package names: pin the
   codename. A mutable tag that a vendor reuses must be verified by digest.
