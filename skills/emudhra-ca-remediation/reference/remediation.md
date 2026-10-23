@@ -121,12 +121,20 @@ for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
   # Only the two marker lines and the four exports this recipe wrote, each
   # matched as a whole line (never a range, so a lost end marker can't take the
   # rest of the file with it). The file is rewritten through `cat >`, so a
-  # symlinked dotfile keeps its link and mode.
-  t=$(mktemp) && sed -E \
+  # symlinked dotfile keeps its link and mode. A copy of the original is taken
+  # first and put back if the rewrite fails partway.
+  t=$(mktemp) && b=$(mktemp) && cat "$f" > "$b" && sed -E \
     -e '/^# emudhra-ca-remediation: temporary, see "Removing the shell fix"$/d' \
     -e '/^# end emudhra-ca-remediation$/d' \
     -e '/^export (SSL_CERT_FILE|CURL_CA_BUNDLE|GIT_SSL_CAINFO|PIP_CERT)="\$HOME\/\.ca-cert\.pem"$/d' \
-    "$f" > "$t" && cat "$t" > "$f" || { echo "could not edit $f"; ok=no; }
+    "$f" > "$t" || { echo "could not edit $f"; ok=no; rm -f "$t" "$b"; continue; }
+  if cat "$t" > "$f"; then
+    rm -f "$b"
+  else
+    ok=no
+    if cat "$b" > "$f"; then echo "could not edit $f, so put it back as it was"; rm -f "$b"
+    else echo "could not edit $f or put it back: its original is in $b"; fi
+  fi
   rm -f "$t"
 done
 unset SSL_CERT_FILE CURL_CA_BUNDLE GIT_SSL_CAINFO PIP_CERT
@@ -176,8 +184,8 @@ client that fails the second run is one that never runs outside a shell.
 
 Also update Homebrew's `ca-certificates`, Docker Desktop (4.96.3), Claude Code
 (2.1.303), mise (2026.10.17), uv, and every python.org install's pip and certifi.
-`docker desktop update` restarts Docker and kills running containers, so warn
-whoever owns them first. Homebrew's `bun` formula can lag the fix: check
+`docker desktop update` restarts Docker and kills running containers, so run it
+only after the person, and whoever owns those containers, says go. Homebrew's `bun` formula can lag the fix: check
 `bun --version` against 1.4.4, not the formula's name.
 
 ### Version managers keep the old runtimes
