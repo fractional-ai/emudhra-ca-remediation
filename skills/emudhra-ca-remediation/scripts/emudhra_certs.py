@@ -17,7 +17,9 @@ parser, and match the fingerprints the advisory publishes.
 
 import base64
 import hashlib
+import os
 import re
+import sys
 
 # The eight intermediates whose private keys are recoverable. SPKI SHA-256 -> name.
 BAD_INTERMEDIATES = {
@@ -55,6 +57,34 @@ BAD_ROOTS = {
 }
 
 BAD_SPKIS = dict(BAD_INTERMEDIATES, **BAD_ROOTS)
+
+# The exact certificates a macOS Keychain must deny. Trust settings attach to a
+# certificate, not to its key, so these are certificate SHA-256s: both issuances
+# of each intermediate and the three emSign roots. AAA Certificate Services is
+# left out on purpose, because it anchors a large part of the web. A PEM from the
+# advisory's feeds is used only if its hash is one of these, so a changed feed
+# can't swap in a different certificate. SHA-256 -> file stem.
+KEYCHAIN_DENY = {
+    "42C4ACCD12C4F59597925E1A08A7A90102608543809308D50EC427E118BA1493": "em-dv-tls-ca-g3b-emsign",
+    "45A883F349AEDFD5F3A649B5498FFB121712BA8B448F3F2A91DBC5A766FCDDBE": "em-dv-tls-ca-g3b-aaa",
+    "98B896625C0C230ADEEC3EB2CF6AAD5001ECF9156A68644E82374CE5833BC25B": "em-ov-tls-ca-g3b-emsign",
+    "5F1DED4DD590AF74631290CF073B122A2AAC6A1FA479778A0BD43579BD832699": "em-ov-tls-ca-g3b-aaa",
+    "E7568FE6E12331F4FD7DE61DA4C7559D0F8EB192A218D4741A3BA75184333838": "em-ev-tls-ca-g3b-emsign",
+    "579480AEA166290BD3C643589E795FC0D0E54E86505D180F1DFF99EFD3199512": "em-ev-tls-ca-g3b-aaa",
+    "0164D7CEAE5BB909C272AF151FF44B1177AE9B47D9424B94F1D9558C30934D19": "em-dv-tls-ca-g3c-emsign",
+    "62B7F9868263F72F6911FC78CEAF72C1979158B7368BF648683BB2AA39B02E72": "em-dv-tls-ca-g3c-aaa",
+    "CB6E15165AC802E9B3F993F16C25D41F4E81C21EBDE71AE1B012AC00BF9C7C3F": "em-ov-tls-ca-g3c-emsign",
+    "7485B51C0ED192878FA1D2F948FB529AE1842CC5086C4B67F7BE5B2039DE9489": "em-ov-tls-ca-g3c-aaa",
+    "432EC25F0D28DE9006D97BF752F17BBB2CD41F669933FCB072D9A1148D0261F3": "em-ev-tls-ca-g3c-emsign",
+    "FD9D5C2DBBD4995AB69B8D50C439D9527B00529199C2FD01B2174EB58F07021F": "em-ev-tls-ca-g3c-aaa",
+    "9E39DE2881273ACC225A149C72BA3E0F51424963669AB633EE1DC7DF5DB067B4": "em-ov-cs-ca-g3b-emsign",
+    "A496E23AC0CAB8155FC9B117B97EAE368EFCBB9041AEC8804D5A308D2D01C2D8": "em-ov-cs-ca-g3b-aaa",
+    "4B2460A466F95FD40113BCDCCA2CEB29B3B093921DE45474DA7DF48874C630B1": "em-ov-cs-ca-g3c-emsign",
+    "84112972B8E59D14560AE7E7119654474AAD119990CF3722BFC1E3B91615E1FD": "em-ov-cs-ca-g3c-aaa",
+    "7DD78D5F4F13459A83DFF9ABBBA62EDBAF6F2D102BF257FD712F4D9F2746ED8D": "emsign-root-tls-ca-g3",
+    "F2EDAAFF3D9B701FB4D14C9F285F8C0BAD90FC3BCC1FA07D47F4718EDABA34A5": "emsign-root-cs-ca-g3",
+    "86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B": "emsign-ecc-root-ca-g3",
+}
 
 # The raw public keys (subjectPublicKey contents) of all twelve. However a
 # program embeds a trust anchor, as a certificate, a bare SPKI (rustls's
@@ -320,3 +350,51 @@ def chain_is_compromised(chain):
         if spki_sha256(der) in BAD_INTERMEDIATES:
             return True
     return bool(chain) and authority_key_id(chain[0]) in BAD_INTERMEDIATE_SKIS
+
+
+def keychain_pems(out_dir, sources):
+    """Write each certificate in KEYCHAIN_DENY found in the source files (the
+    advisory's JSON feeds, or any PEM) to OUT_DIR/<stem>.pem. Every other
+    certificate is ignored. Writes nothing unless all of them were found, and
+    returns the stems still missing."""
+    found = {}
+    for src in sources:
+        with open(src, "rb") as f:
+            for der in pem_certificates(f.read()):
+                fp = cert_sha256(der)
+                if fp in KEYCHAIN_DENY:
+                    found[KEYCHAIN_DENY[fp]] = der
+    missing = sorted(set(KEYCHAIN_DENY.values()) - set(found))
+    if missing:
+        return missing
+    for stem, der in found.items():
+        b = base64.b64encode(der).decode()
+        with open(os.path.join(out_dir, stem + ".pem"), "w") as f:
+            f.write("-----BEGIN CERTIFICATE-----\n%s\n-----END CERTIFICATE-----\n"
+                    % "\n".join(b[i:i + 64] for i in range(0, len(b), 64)))
+    return []
+
+
+def main(argv):
+    if len(argv) < 3 or argv[0] != "--keychain-pems":
+        print("usage: emudhra_certs.py --keychain-pems OUT_DIR FILE [FILE ...]", file=sys.stderr)
+        return 2
+    out_dir, sources = argv[1], argv[2:]
+    os.makedirs(out_dir, exist_ok=True)
+    if os.listdir(out_dir):
+        print("ERROR      %s is not empty; use a new directory" % out_dir)
+        return 2
+    try:
+        missing = keychain_pems(out_dir, sources)
+    except (OSError, DERError) as e:
+        print("ERROR      %s" % e)
+        return 2
+    if missing:
+        print("ERROR      not in the sources with a pinned hash: %s" % ", ".join(missing))
+        return 2
+    print("ok         %d pinned certificates written to %s" % (len(KEYCHAIN_DENY), out_dir))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

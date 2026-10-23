@@ -153,6 +153,41 @@ class Constants(unittest.TestCase):
             E.pem_certificates(b"-----BEGIN CERTIFICATE-----\n!!!!\n-----END CERTIFICATE-----")
 
 
+class KeychainPems(Tmp):
+    def test_pinned_list(self):
+        stems = set(E.KEYCHAIN_DENY.values())
+        self.assertEqual(len(E.KEYCHAIN_DENY), 19)
+        self.assertEqual(len([x for x in stems if x.startswith("em-")]), 16)
+        self.assertFalse(any("aaa-certificate" in x for x in stems))
+
+    def test_only_pinned_certificates_are_written(self):
+        real = dict(E.KEYCHAIN_DENY)
+        self.addCleanup(lambda: (E.KEYCHAIN_DENY.clear(), E.KEYCHAIN_DENY.update(real)))
+        E.KEYCHAIN_DENY.clear()
+        E.KEYCHAIN_DENY.update({E.cert_sha256(BAD_ROOT): "root", E.cert_sha256(BAD_INT): "int"})
+        # A substitute with the same key but different bytes is not the pinned certificate.
+        swapped = make_cert(spki_for(KEYS["emSign ECC Root CA - G3"]), "emSign ECC Root CA - G3")
+        feed = self.write("feed.json", json.dumps([{"pem": pem([swapped]).decode()},
+                                                   {"pem": pem([BAD_INT]).decode()}, {"pem": pem([CLEAN[0]]).decode()}]))
+        out = os.path.join(self.dir, "a")
+        os.makedirs(out)
+        self.assertEqual(E.keychain_pems(out, [feed]), ["root"])
+        self.assertEqual(os.listdir(out), [])
+        good = self.write("roots.pem", pem([BAD_ROOT]))
+        self.assertEqual(E.keychain_pems(out, [feed, good]), [])
+        self.assertEqual(sorted(os.listdir(out)), ["int.pem", "root.pem"])
+        with open(os.path.join(out, "root.pem"), "rb") as f:
+            self.assertEqual(E.pem_certificates(f.read()), [BAD_ROOT])
+
+    def test_cli_fails_closed(self):
+        out = os.path.join(self.dir, "deny")
+        self.assertEqual(run("emudhra_certs.py", "--keychain-pems", out, self.write("c.pem", pem(CLEAN)))[0], 2)
+        self.assertEqual(os.listdir(out), [])
+        self.write("deny/old.pem", pem(CLEAN))
+        self.assertEqual(run("emudhra_certs.py", "--keychain-pems", out, os.path.join(self.dir, "c.pem"))[0], 2)
+        self.assertEqual(run("emudhra_certs.py")[0], 2)
+
+
 class TrustStore(Tmp):
     def check(self, *paths):
         return run("trust_store.py", *paths)
@@ -242,6 +277,39 @@ class TrustStore(Tmp):
         got = T.keytool_entries(listing, E.pem_certificates(listing))
         self.assertEqual([(a, t) for _, a, t in got], [("emsigneccrootcag3", True), ("server", False)])
         self.assertIsNone(T.keytool_entries(pem([BAD_ROOT]), [BAD_ROOT]))
+
+    def test_delete_keeps_a_backup_and_hides_the_password(self):
+        kt = shutil.which("keytool")
+        if not kt:
+            self.skipTest("no keytool")
+        store = os.path.join(self.dir, "cacerts")
+        for alias, d in (("clean", CLEAN[0]), ("emsign", BAD_ROOT)):
+            r = subprocess.run([kt, "-importcert", "-noprompt", "-alias", alias, "-file", self.write(alias + ".der", d),
+                                "-keystore", store, "-storetype", "PKCS12", "-storepass", "s3cret-pw"],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        code, out = run("trust_store.py", "--delete", store, env={"STOREPASS": "s3cret-pw"})
+        self.assertEqual(code, 0, out)
+        backups = [f for f in os.listdir(self.dir) if f.startswith("cacerts.bak-")]
+        self.assertEqual(len(backups), 1, out)
+        self.assertIn("backup at", out)
+        self.assertEqual(run("trust_store.py", os.path.join(self.dir, backups[0]), env={"STOREPASS": "s3cret-pw"})[0], 1)
+        self.assertEqual(run("trust_store.py", store, env={"STOREPASS": "s3cret-pw"})[0], 0)
+        with open(os.path.join(SCRIPTS, "trust_store.py")) as f:
+            self.assertNotIn('"-storepass", pw', f.read())
+
+    def test_delete_no_backup(self):
+        kt = shutil.which("keytool")
+        if not kt:
+            self.skipTest("no keytool")
+        store = os.path.join(self.dir, "cacerts")
+        r = subprocess.run([kt, "-importcert", "-noprompt", "-alias", "emsign", "-file", self.write("r.der", BAD_ROOT),
+                            "-keystore", store, "-storetype", "PKCS12", "-storepass", "changeit"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        code, out = run("trust_store.py", "--delete", "--no-backup", store)
+        self.assertEqual(code, 0, out)
+        self.assertEqual([f for f in os.listdir(self.dir) if ".bak-" in f], [])
 
     def test_pkcs12_passwordless(self):
         src = self.write("c.pem", pem([CLEAN[0], BAD_ROOT]))

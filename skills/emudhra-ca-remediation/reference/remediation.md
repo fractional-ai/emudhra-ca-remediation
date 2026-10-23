@@ -88,29 +88,54 @@ Filter by key, not by name, so a renamed copy can't slip through:
 ```bash
 python3 trust_store.py --filter ~/.ca-cert.pem /etc/ssl/cert.pem
 cat >> ~/.zshrc <<'EOF'
+# emudhra-ca-remediation: temporary, see "Removing the shell fix"
 export SSL_CERT_FILE="$HOME/.ca-cert.pem"
 export CURL_CA_BUNDLE="$HOME/.ca-cert.pem"
 export GIT_SSL_CAINFO="$HOME/.ca-cert.pem"
 export PIP_CERT="$HOME/.ca-cert.pem"
+# end emudhra-ca-remediation
 EOF
 ```
+
+The filtered bundle is a frozen copy of `/etc/ssl/cert.pem`, so roots that Apple
+adds or removes later never reach it. It is a stopgap. Record it in the machine's
+inventory row with the condition below, and take it out once that condition holds.
+
+#### Removing the shell fix
+
+| Change | Remove when | How to check |
+|---|---|---|
+| The `~/.zshrc` exports and `~/.ca-cert.pem` | Every client they cover refuses the chains on its own: a macOS update has fixed `/etc/ssl/cert.pem`, and certifi, Homebrew's `ca-certificates` and pip are on fixed versions | `python3 trust_store.py /etc/ssl/cert.pem` exits 0, and `env -u SSL_CERT_FILE -u CURL_CA_BUNDLE -u GIT_SSL_CAINFO -u PIP_CERT sh probe_runtime.sh` exits 0 |
+
+```bash
+sed -i '' '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' ~/.zshrc
+rm ~/.ca-cert.pem
+```
+
+Then open a new shell and run `probe_runtime.sh` again. If you filtered
+`/etc/ssl/cert.pem` itself with sudo, leave it alone: the next macOS update that
+touches it puts Apple's copy back.
 
 `OPENSSL_X509_TEA_DISABLE=1` made no measurable difference when tested, so don't
 count it as a fix. The filter also drops AAA Certificate Services, so a legacy site
 whose chain reaches only AAA will fail for these clients. That is the tradeoff;
 github.com, pypi.org and Sectigo's own sites still work.
 
-For the Keychain, deny the emSign roots and the eight intermediates (all of
-them, including the AAA-signed G3B and G3C copies). Don't deny AAA Certificate
-Services itself: it anchors a large part of the web.
+For the Keychain, deny the three emSign roots and both issuances of each of the
+eight intermediates, including the AAA-signed G3B and G3C copies: 19
+certificates. Don't deny AAA Certificate Services itself: it anchors a large part
+of the web. The certificates come from the advisory's feeds, but only the ones
+whose SHA-256 is pinned in `emudhra_certs.py` are used, so a changed feed can't
+swap one out. `--keychain-pems` exits 2 and writes nothing unless it finds all 19.
 
 ```bash
-# Save each certificate's "pem" field from the advisory's feeds
-# (impacted-intermediates.json, roots.json) as its own file first
-for c in emsign-ecc-root-g3.pem emsign-root-tls-g3.pem emsign-root-cs-g3.pem em-*-g3b.pem em-*-g3c.pem; do
+curl -fsSO https://emudhra.we-have-a-problem.com/impacted-intermediates.json
+curl -fsSO https://emudhra.we-have-a-problem.com/roots.json
+python3 emudhra_certs.py --keychain-pems deny impacted-intermediates.json roots.json || exit
+for c in deny/*.pem; do
   security add-trusted-cert -r deny -k ~/Library/Keychains/login.keychain-db "$c"
 done
-security verify-cert -c em-dv-tls-g3b.pem   # must report "Trust Setting: deny"
+security verify-cert -c deny/em-dv-tls-ca-g3b-aaa.pem   # must report "Trust Setting: deny"
 ```
 
 Environment variables reach only shells. Anything launched by launchd, a GUI app or
@@ -379,7 +404,7 @@ whichever one the JVM actually reads.
 
   ```dockerfile
   COPY emudhra_certs.py trust_store.py /tmp/
-  RUN python3 /tmp/trust_store.py --delete "$JAVA_HOME/lib/security/cacerts" \
+  RUN python3 /tmp/trust_store.py --delete --no-backup "$JAVA_HOME/lib/security/cacerts" \
    && python3 /tmp/trust_store.py "$JAVA_HOME/lib/security/cacerts" \
    && rm /tmp/emudhra_certs.py /tmp/trust_store.py
   ```
@@ -387,7 +412,9 @@ whichever one the JVM actually reads.
   The script finds entries by public key, since alias names and subjects differ by
   vendor, deletes them with keytool by path (JDK 8's keytool has no `-cacerts`
   option), and re-reads the store: the build fails if keytool errors or an affected
-  entry survives. It needs Python in the build stage; in a JDK image without it,
+  entry survives. `--no-backup` is for image builds only, where a leftover copy
+  would still hold both roots. Anywhere else, leave it off and the script first
+  copies the store to `cacerts.bak-<timestamp>`. It needs Python in the build stage; in a JDK image without it,
   do the deletion in a stage that has both, or copy `cacerts` out and back. Don't hand-roll this as
   `keytool -cacerts … -delete … ; true`: on JDK 8 that fails silently and leaves both
   roots in place.
