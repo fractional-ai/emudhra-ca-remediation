@@ -112,13 +112,17 @@ any line that points at the bundle as well as the marked block, and check every
 shell file before deleting the bundle:
 
 ```bash
+set --
 for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
-  [ -f "$f" ] && sed -i '' -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
-    -e '/\.ca-cert\.pem/d' "$f"
+  [ -f "$f" ] && set -- "$@" "$f"
 done
+[ $# -eq 0 ] || sed -i '' -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
+  -e '/\.ca-cert\.pem/d' "$@"
 unset SSL_CERT_FILE CURL_CA_BUNDLE GIT_SSL_CAINFO PIP_CERT
-grep -n 'ca-cert\.pem' ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile 2>/dev/null \
-  || rm ~/.ca-cert.pem   # deletes the bundle only once nothing refers to it
+grep -n 'ca-cert\.pem' "$@" < /dev/null
+# grep exits 1 only when it read every file and found nothing. 0 (a line still
+# refers to the bundle) or 2 (a file could not be read) keeps the bundle.
+[ $? -eq 1 ] && rm ~/.ca-cert.pem
 ```
 
 Then open a new shell and run `probe_runtime.sh` again. If you filtered
