@@ -187,13 +187,17 @@ the release's image or slug, then rebuild **with the build cache cleared**:
   shipped `ca-certificates 20260601`, which accepts the 6 emSign chains, and jobs
   in one run can land on old and new images. The fixed package
   (`20260816ubuntu0.24.04.1`, `.26.04.1`) is published, and `--only-upgrade`
-  installs it on today's runners. ubuntu24 images from `20261021` on ship it;
-  `20261012` does not, and was still being served alongside them on 2026-10-22.
-  Until no job lands on an older image, make this the **first** step of every
-  job, before `actions/checkout`, which sends `GITHUB_TOKEN`. Each job's "Set up
-  job" log prints its image version. Remove the step only after a probe on a
-  throwaway branch, run several times, never lands on an image older than
-  `20261021`:
+  installs it on today's runners. Make this the **first** step of every hosted
+  ubuntu job, before `actions/checkout`, which sends `GITHUB_TOKEN`. Each image
+  family (ubuntu-22.04, 24.04, 26.04, and the arm64 images) rolls out on its own:
+  ubuntu-24.04 x64 images from `20261021` on ship the fix, `20261012` does not
+  and was still being served alongside them on 2026-10-22, and the other
+  families need their own release checked. Old images keep landing jobs until
+  the rollout finishes, so remove the step from a family's jobs only when
+  actions/runner-images (its release notes or the family's readme) shows the
+  rollout complete and the image's installed ca-certificates at 20260816 or
+  later. Each job's "Set up job" log prints its image version, and a probe run
+  can confirm that, but a few clean runs can't show the old image is gone:
 
   ```yaml
   - run: sudo apt-get update && sudo apt-get install -y --only-upgrade ca-certificates

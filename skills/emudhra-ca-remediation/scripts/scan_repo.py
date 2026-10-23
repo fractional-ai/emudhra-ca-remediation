@@ -1270,8 +1270,10 @@ def check_hosted_runner(path, doc):
                 "--only-upgrade ca-certificates` as the first step of this job. The runner's own Node, which runs "
                 "JavaScript actions, was 24.21.0 before runner v2.338.1: until every job runs on 2.338.1 or later, set "
                 "NODE_OPTIONS=--use-openssl-ca and SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt in the job's env "
-                "where it exchanges credentials (reference/deployed-verification.md, CI/CD runners). Once no job "
-                "lands on an image older than ubuntu24 20261021, this row is answered and the step can go")
+                "where it exchanges credentials (reference/deployed-verification.md, CI/CD runners). The step can go "
+                "for an image family (ubuntu-22.04, 24.04, 26.04 and arm64 roll out separately) only once "
+                "actions/runner-images reports that family's rollout complete with ca-certificates 20260816 or "
+                "later; a few clean probe runs are not proof")
 
 
 def fallback_yaml(path, text):
