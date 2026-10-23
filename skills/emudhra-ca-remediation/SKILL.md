@@ -139,10 +139,10 @@ date: see "Keeping current" below.
 - **Hosted CI runners.** GitHub's `ubuntu-latest` images (24.04 and 26.04) shipped
   `ca-certificates 20260601`, which accepts the 6 emSign chains in curl, git,
   Python, Ruby and PHP, and `actions/checkout` sends `GITHUB_TOKEN` over it.
-  Patched and unpatched images rotate together. For ubuntu-24.04 (x64), `20261021`
-  and later carry the fixed package, and `20261012` was still being served on
-  2026-10-22; every other image family (22.04, 26.04, the arm64 images) is
-  separate and needs its own release checked. The
+  As of 2026-10-23 only `ubuntu-slim` (`20261021.31`) lists the fixed package.
+  No standard ubuntu image release (22.04, 24.04, 26.04, arm64) does: the
+  ubuntu-24.04 `20261023` release shows no ca-certificates change from the
+  vulnerable `20261012`. The
   runner's own Node, which runs JavaScript actions and their OIDC credential
   exchanges, was 24.21.0 until runner v2.338.1 (2026-10-22) bundled 24.22.1.
 - uv < 0.13.4, Node outside 22.23.4 / 24.22.1 / 26.12.1, Deno < 2.9.8, Electron

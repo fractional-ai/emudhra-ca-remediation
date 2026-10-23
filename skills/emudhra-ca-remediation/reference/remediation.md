@@ -440,10 +440,10 @@ store through curl.
 | Freedesktop SDK (Flatpak) | 25.08.19, 26.08.3 |
 
 GitHub-hosted runners pick up new images on GitHub's schedule, and old and new
-images serve jobs side by side. For ubuntu-24.04 x64, `20261021` and later carry
-ca-certificates 20260816 and `20261012` does not; each other image family rolls
-out separately. Upgrade the package in the job until GitHub reports that
-family's rollout complete with the fixed package (deployed-verification.md,
+images serve jobs side by side. As of 2026-10-23 only `ubuntu-slim` lists
+ca-certificates 20260816; no standard ubuntu image release does, so a newer image
+date proves nothing. Upgrade the package in the job until GitHub states that
+family ships the fixed package and its rollout is complete (deployed-verification.md,
 "CI/CD runners"). Confirm by
 running `probe_runtime.sh` in a workflow on a throwaway branch, not in a merged
 change. BuildKit from `docker/setup-buildx-action`'s default
