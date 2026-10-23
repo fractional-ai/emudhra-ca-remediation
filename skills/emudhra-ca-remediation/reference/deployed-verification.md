@@ -187,16 +187,21 @@ the release's image or slug, then rebuild **with the build cache cleared**:
   shipped `ca-certificates 20260601`, which accepts the 6 emSign chains, and jobs
   in one run can land on old and new images. The fixed package
   (`20260816ubuntu0.24.04.1`, `.26.04.1`) is published, and `--only-upgrade`
-  installs it on today's runners. Until every image ships it, make this the
-  **first** step of every job, before `actions/checkout`, which sends
-  `GITHUB_TOKEN`. Remove it once all runner images are on 20260816:
+  installs it on today's runners. ubuntu24 images from `20261021` on ship it;
+  `20261012` does not, and was still being served alongside them on 2026-10-22.
+  Until no job lands on an older image, make this the **first** step of every
+  job, before `actions/checkout`, which sends `GITHUB_TOKEN`. Each job's "Set up
+  job" log prints its image version. Remove the step only after a probe on a
+  throwaway branch, run several times, never lands on an image older than
+  `20261021`:
 
   ```yaml
   - run: sudo apt-get update && sudo apt-get install -y --only-upgrade ca-certificates
   ```
 
-  The runner's own Node (`externals/node24`, 24.21.0 at the time) runs
-  JavaScript actions and their OIDC credential exchanges. `NODE_OPTIONS` set
+  The runner's own Node (`externals/node24`) runs JavaScript actions and their
+  OIDC credential exchanges. It was 24.21.0 until runner v2.338.1 (2026-10-22),
+  which bundles 24.22.1. `NODE_OPTIONS` set
   through `GITHUB_ENV` is rejected, but set in the workflow's or job's `env:` it
   works. Confirmed in CI, this made it refuse all 12 chains:
 
@@ -207,8 +212,8 @@ the release's image or slug, then rebuild **with the build cache cleared**:
   ```
 
   Add it only to jobs that exchange credentials through a JavaScript action (OIDC
-  to a cloud, registry logins). It is temporary: remove it once the runner ships
-  Node >= 24.22.1. `scan_repo.py` flags hosted-runner jobs without the upgrade step.
+  to a cloud, registry logins). It is temporary: remove it once every job's
+  "Set up job" log shows runner version 2.338.1 or later. `scan_repo.py` flags hosted-runner jobs without the upgrade step.
 - `actions/setup-node` with a floating version (`24`, `lts/*`) uses the runner's
   cached Node unless `check-latest: true` is set. Pin the exact fixed version.
 - A repo with no CI is verified the same way as any other: run the scripts

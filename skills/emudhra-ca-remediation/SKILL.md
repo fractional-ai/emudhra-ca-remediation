@@ -139,9 +139,10 @@ date: see "Keeping current" below.
 - **Hosted CI runners.** GitHub's `ubuntu-latest` images (24.04 and 26.04) shipped
   `ca-certificates 20260601`, which accepts the 6 emSign chains in curl, git,
   Python, Ruby and PHP, and `actions/checkout` sends `GITHUB_TOKEN` over it.
-  Patched and unpatched images rotate together. The runner's own Node 24.21.0,
-  which runs JavaScript actions and their OIDC credential exchanges, can't be
-  fixed from a workflow at all.
+  Patched and unpatched images rotate together: ubuntu24 `20261021` and later carry
+  the fixed package, and `20261012` was still being served on 2026-10-22. The
+  runner's own Node, which runs JavaScript actions and their OIDC credential
+  exchanges, was 24.21.0 until runner v2.338.1 (2026-10-22) bundled 24.22.1.
 - uv < 0.13.4, Node outside 22.23.4 / 24.22.1 / 26.12.1, Deno < 2.9.8, Electron
   apps, and Bun < 1.4.4 (including `bun build --compile` binaries).
 - Any Go binary built before Go 1.26.10 / 1.27.3, including third-party CLIs:
@@ -432,8 +433,9 @@ One PR per repo. In it:
   package, add the `ca-certificates` upgrade as the first step of each hosted
   ubuntu job (deployed-verification.md, "CI/CD runners"). `actions/checkout` sends
   `GITHUB_TOKEN` in nearly every job, so don't try to pick jobs. One line per job
-  (temporary). Once GitHub's images ship the fixed package, `scan_repo.py`'s
-  hosted-runner REVIEW rows are answered by that, and the step is removed.
+  (temporary). Once no job lands on an image older than ubuntu24 `20261021`
+  (shown in each job's "Set up job" log), `scan_repo.py`'s hosted-runner REVIEW
+  rows are answered by that, and the step is removed.
 - If CI can't install a fixed version you pinned (for example, setup-node finds no
   22.23.4), the release has not reached that mirror yet. Wait for it, or install
   from the vendor. Don't fall back to a floating version. CI is the first place a
