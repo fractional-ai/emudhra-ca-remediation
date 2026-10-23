@@ -107,22 +107,35 @@ inventory row with the condition below, and take it out once that condition hold
 |---|---|---|
 | The `~/.zshrc` exports and `~/.ca-cert.pem` | Every client they cover refuses the chains on its own: a macOS update has fixed `/etc/ssl/cert.pem`, and certifi, Homebrew's `ca-certificates` and pip are on fixed versions | `python3 trust_store.py /etc/ssl/cert.pem` exits 0, and `env -u SSL_CERT_FILE -u CURL_CA_BUNDLE -u GIT_SSL_CAINFO -u PIP_CERT sh probe_runtime.sh` exits 0 |
 
-Older copies of this recipe wrote the exports without the marker lines, so remove
-any line that points at the bundle as well as the marked block, and check every
-shell file before deleting the bundle:
+Older copies of this recipe wrote the exports without the marker lines. So this
+removes the marked block and those four exact exports from every shell startup
+file, and nothing else. It deletes the bundle only if every edit succeeded and no
+line anywhere still mentions it; otherwise it lists what is left to fix by hand:
 
 ```bash
+ok=yes
 set --
 for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
-  [ -f "$f" ] && set -- "$@" "$f"
+  [ -e "$f" ] || continue
+  set -- "$@" "$f"
+  # Only the marked block and the four exports this recipe wrote. The file is
+  # rewritten through `cat >`, so a symlinked dotfile keeps its link and mode.
+  t=$(mktemp) && sed -E \
+    -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
+    -e '/^export (SSL_CERT_FILE|CURL_CA_BUNDLE|GIT_SSL_CAINFO|PIP_CERT)="\$HOME\/\.ca-cert\.pem"$/d' \
+    "$f" > "$t" && cat "$t" > "$f" || { echo "could not edit $f"; ok=no; }
+  rm -f "$t"
 done
-[ $# -eq 0 ] || sed -i '' -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
-  -e '/\.ca-cert\.pem/d' "$@"
 unset SSL_CERT_FILE CURL_CA_BUNDLE GIT_SSL_CAINFO PIP_CERT
-grep -n 'ca-cert\.pem' "$@" < /dev/null
-# grep exits 1 only when it read every file and found nothing. 0 (a line still
-# refers to the bundle) or 2 (a file could not be read) keeps the bundle.
-[ $? -eq 1 ] && rm ~/.ca-cert.pem
+grep -n 'ca-cert\.pem' "$@" < /dev/null; rc=$?
+if [ "$ok" = yes ] && [ "$rc" -eq 1 ]; then
+  rm ~/.ca-cert.pem && echo "removed ~/.ca-cert.pem"
+else
+  # Any line listed above still refers to the bundle (an if block, an alias, a
+  # different export): fix it by hand, then run this again. Any error also
+  # keeps the bundle.
+  echo "kept ~/.ca-cert.pem"
+fi
 ```
 
 Then open a new shell and run `probe_runtime.sh` again. If you filtered
