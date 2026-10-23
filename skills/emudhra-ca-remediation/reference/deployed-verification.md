@@ -187,16 +187,27 @@ the release's image or slug, then rebuild **with the build cache cleared**:
   shipped `ca-certificates 20260601`, which accepts the 6 emSign chains, and jobs
   in one run can land on old and new images. The fixed package
   (`20260816ubuntu0.24.04.1`, `.26.04.1`) is published, and `--only-upgrade`
-  installs it on today's runners. Until every image ships it, make this the
-  **first** step of every job, before `actions/checkout`, which sends
-  `GITHUB_TOKEN`. Remove it once all runner images are on 20260816:
+  installs it on today's runners. Make this the **first** step of every hosted
+  ubuntu job, before `actions/checkout`, which sends `GITHUB_TOKEN`. Each image
+  family (ubuntu-22.04, 24.04, 26.04, and the arm64 images) rolls out on its own.
+  As of 2026-10-23 only `ubuntu-slim` `20261021.31` lists ca-certificates
+  `20260816ubuntu0.24.04.1`; the standard images' readmes don't list the package
+  at all, and the ubuntu-24.04 `20261023` release shows no ca-certificates
+  change from the vulnerable `20261012`. A newer image date is not
+  evidence of the fix. Old images keep landing jobs until a rollout finishes, so
+  remove the step from a family's jobs only when actions/runner-images (a release
+  note or an announcement) states that family ships ca-certificates 20260816 or
+  later and its rollout is complete. Each job's "Set up job" log prints its image
+  version, and a probe run can confirm the fix, but a few clean runs can't show
+  the old image is gone:
 
   ```yaml
   - run: sudo apt-get update && sudo apt-get install -y --only-upgrade ca-certificates
   ```
 
-  The runner's own Node (`externals/node24`, 24.21.0 at the time) runs
-  JavaScript actions and their OIDC credential exchanges. `NODE_OPTIONS` set
+  The runner's own Node (`externals/node24`) runs JavaScript actions and their
+  OIDC credential exchanges. It was 24.21.0 until runner v2.338.1 (2026-10-22),
+  which bundles 24.22.1. `NODE_OPTIONS` set
   through `GITHUB_ENV` is rejected, but set in the workflow's or job's `env:` it
   works. Confirmed in CI, this made it refuse all 12 chains:
 
@@ -207,8 +218,10 @@ the release's image or slug, then rebuild **with the build cache cleared**:
   ```
 
   Add it only to jobs that exchange credentials through a JavaScript action (OIDC
-  to a cloud, registry logins). It is temporary: remove it once the runner ships
-  Node >= 24.22.1. `scan_repo.py` flags hosted-runner jobs without the upgrade step.
+  to a cloud, registry logins). It is temporary, but the runner version is chosen
+  per job at queue time while a runner release rolls out, so a job log showing
+  2.338.1 doesn't mean the next job gets it. Remove it only once GitHub states
+  the 2.338.1 (or later) rollout to hosted runners is complete. `scan_repo.py` flags hosted-runner jobs without the upgrade step.
 - `actions/setup-node` with a floating version (`24`, `lts/*`) uses the runner's
   cached Node unless `check-latest: true` is set. Pin the exact fixed version.
 - A repo with no CI is verified the same way as any other: run the scripts

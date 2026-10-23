@@ -440,8 +440,11 @@ store through curl.
 | Freedesktop SDK (Flatpak) | 25.08.19, 26.08.3 |
 
 GitHub-hosted runners pick up new images on GitHub's schedule, and old and new
-images serve jobs side by side. Until all are on ca-certificates 20260816, upgrade
-the package in the job (deployed-verification.md, "CI/CD runners"). Confirm by
+images serve jobs side by side. As of 2026-10-23 only `ubuntu-slim` lists
+ca-certificates 20260816; no standard ubuntu image release does, so a newer image
+date proves nothing. Upgrade the package in the job until GitHub states that
+family ships the fixed package and its rollout is complete (deployed-verification.md,
+"CI/CD runners"). Confirm by
 running `probe_runtime.sh` in a workflow on a throwaway branch, not in a merged
 change. BuildKit from `docker/setup-buildx-action`'s default
 `moby/buildkit:buildx-stable-1` was built on go1.26.8. v0.34.1 is on go1.26.10:
