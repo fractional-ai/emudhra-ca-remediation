@@ -161,10 +161,10 @@ def parse_table(page):
     return live
 
 
-def unknown_certificates(feeds):
-    """Certificates in the advisory's feeds whose key the skill's tools do not
-    list. Every PEM is parsed here; the feed's own fingerprint field is only
-    cross-checked, never trusted alone."""
+def feed_certificates(feeds):
+    """(label, der, spki) for every certificate in the advisory's feeds. Every
+    PEM is parsed here; the feed's own fingerprint field is only cross-checked,
+    never trusted alone."""
     out = []
     for name, entries in feeds.items():
         if not isinstance(entries, list) or not entries:
@@ -176,9 +176,32 @@ def unknown_certificates(feeds):
             spki = E.spki_sha256(ders[0])
             if c.get("spki_sha256") and c["spki_sha256"].upper() != spki:
                 raise ValueError("%s: %r says spki %s but its pem has %s" % (name, c.get("name"), c["spki_sha256"], spki))
-            if spki not in E.BAD_SPKIS:
-                out.append("%s (%s, spki %s)" % (c.get("name") or E.subject_cn(ders[0]), name, spki))
+            out.append(("%s (%s, spki %s)" % (c.get("name") or E.subject_cn(ders[0]), name, spki), ders[0], spki))
     return out
+
+
+def unknown_certificates(feeds):
+    """Certificates in the advisory's feeds whose key the skill's tools do not list."""
+    return [label for label, _, spki in feed_certificates(feeds) if spki not in E.BAD_SPKIS]
+
+
+# Not denied in the Keychain on purpose (see emudhra_certs.KEYCHAIN_DENY).
+KEYCHAIN_KEEP = {spki for spki, name in E.BAD_ROOTS.items() if name == "AAA Certificate Services"}
+
+
+def missing_pins(feeds):
+    """KEYCHAIN_DENY certificates the feeds no longer list. The certificate stays
+    compromised, but --keychain-pems can't find it there any more."""
+    seen = {E.cert_sha256(der) for _, der, _ in feed_certificates(feeds)}
+    return sorted(stem for fp, stem in E.KEYCHAIN_DENY.items() if fp not in seen)
+
+
+def unpinned_issuances(feeds):
+    """Affected certificates whose key is known but whose exact certificate is
+    not in KEYCHAIN_DENY: a new issuance or cross-sign of a known key. Keychain
+    trust settings attach to a certificate, so the Keychain step would miss it."""
+    return [label for label, der, spki in feed_certificates(feeds)
+            if spki in E.BAD_SPKIS and spki not in KEYCHAIN_KEEP and E.cert_sha256(der) not in E.KEYCHAIN_DENY]
 
 
 def main():
@@ -198,14 +221,23 @@ def main():
         return 0
     changed = failed = False
     try:
-        new = unknown_certificates({f: json.loads(get(URL + f)) for f in FEEDS})
+        feeds = {f: json.loads(get(URL + f)) for f in FEEDS}
+        new, reissued, gone = unknown_certificates(feeds), unpinned_issuances(feeds), missing_pins(feeds)
     except Exception as e:
         print("ERROR      could not check the certificate feeds (%s): %s" % (", ".join(FEEDS), e))
         failed = True
-        new = []
+        new = reissued = gone = []
     for item in new:
-        print("NEW CERT   %s: add its SPKI and SKI to emudhra_certs.py (and probe_runtime.sh); "
-              "until then the tools cannot see it" % item)
+        print("NEW CERT   %s: add its SPKI and SKI to emudhra_certs.py (and probe_runtime.sh), and its "
+              "SHA-256 to KEYCHAIN_DENY; until then the tools cannot see it" % item)
+        changed = True
+    for stem in gone:
+        print("REMOVED    pinned certificate %s is no longer in the feeds. It is still compromised: keep it "
+              "denied, and find out why it was dropped before trusting the feeds again" % stem)
+        changed = True
+    for item in reissued:
+        print("NEW CERT   %s: a new certificate for a known key; add its SHA-256 to KEYCHAIN_DENY in "
+              "emudhra_certs.py, or the macOS Keychain step will not deny it" % item)
         changed = True
     for name, now in live.items():
         was = SNAPSHOT.get(name)

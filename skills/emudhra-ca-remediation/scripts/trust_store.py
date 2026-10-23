@@ -10,6 +10,7 @@ expiry dates and the wording of other tools' output never decide the verdict.
     trust_store.py system java python          # this machine's usual stores
     trust_store.py --root fs system java python  # an exported image's stores
     trust_store.py --delete /path/to/cacerts   # remove affected trusted entries
+    trust_store.py --delete --no-backup cacerts  # in an image build: no backup copy
     trust_store.py --filter clean.pem bundle.pem         # write a fixed copy
 
 STORE is a file or directory, or one of these words (with --root, they name
@@ -26,6 +27,11 @@ Formats: PEM (any number of certificates, including TRUSTED CERTIFICATE
 blocks), single DER certificates, directories of either (OpenSSL hash dirs,
 anchors dirs), JKS, and PKCS12 (password-less, as JDK 18+ cacerts are; for a
 password-protected one keytool is used, with STOREPASS, default "changeit").
+The password reaches keytool through its environment, never its command line.
+
+--delete first copies the store to STORE.bak-YYYYMMDDHHMMSS next to it, and
+says where. In an image build pass --no-backup: the copy still holds the
+affected roots, and a scan of the image would find them in it.
 
 Verdicts, one line per store:
   VULNERABLE  it holds an affected root or intermediate as a trust anchor
@@ -49,6 +55,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import emudhra_certs as E  # noqa: E402
@@ -226,13 +233,23 @@ def _p12_local_key_id(data, bag):
     return None
 
 
+def storepasses():
+    return [os.environ["STOREPASS"]] if os.environ.get("STOREPASS") else ["changeit", ""]
+
+
+def keytool(kt, args, pw):
+    """Run keytool with the password in its environment, so it never shows in ps."""
+    env = dict(os.environ, EMUDHRA_STOREPASS=pw)
+    return subprocess.run([kt, "-J-Duser.language=en"] + args + ["-storepass:env", "EMUDHRA_STOREPASS"],
+                          capture_output=True, timeout=120, env=env)
+
+
 def read_with_keytool(path):
     kt = shutil.which("keytool")
     if not kt:
         raise StoreError("password-protected keystore and no keytool to read it")
-    for pw in ([os.environ["STOREPASS"]] if os.environ.get("STOREPASS") else ["changeit", ""]):
-        r = subprocess.run([kt, "-J-Duser.language=en", "-list", "-rfc", "-keystore", path, "-storepass", pw],
-                           capture_output=True, timeout=120)
+    for pw in storepasses():
+        r = keytool(kt, ["-list", "-rfc", "-keystore", path], pw)
         if r.returncode == 0:
             certs = E.pem_certificates(r.stdout)
             if not certs:
@@ -503,15 +520,27 @@ def check(path, root):
     return read_file(real)
 
 
+def backup(path):
+    dst = "%s.bak-%s" % (path, time.strftime("%Y%m%d%H%M%S"))
+    # Created exclusively with the store's own permissions before any byte is
+    # written, so a keystore holding private keys is never readable by others.
+    try:
+        fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_EXCL, os.stat(path).st_mode & 0o600)
+    except FileExistsError:
+        raise StoreError("backup %s already exists" % dst)
+    with os.fdopen(fd, "wb") as out, open(path, "rb") as src:
+        shutil.copyfileobj(src, out)
+    shutil.copystat(path, dst)
+    return dst
+
+
 def delete_entries(path, aliases):
     kt = shutil.which("keytool")
     if not kt:
         raise StoreError("--delete needs keytool")
-    pws = [os.environ["STOREPASS"]] if os.environ.get("STOREPASS") else ["changeit", ""]
     for a in aliases:
-        for pw in pws:
-            r = subprocess.run([kt, "-J-Duser.language=en", "-delete", "-noprompt", "-keystore", path,
-                                "-storepass", pw, "-alias", a], capture_output=True, timeout=120)
+        for pw in storepasses():
+            r = keytool(kt, ["-delete", "-noprompt", "-keystore", path, "-alias", a], pw)
             if r.returncode == 0:
                 break
         else:
@@ -520,7 +549,7 @@ def delete_entries(path, aliases):
 
 def main():
     argv = sys.argv[1:]
-    opts = {"--json": False, "--delete": False}
+    opts = {"--json": False, "--delete": False, "--no-backup": False}
     root = filter_out = None
     args = []
     i = 0
@@ -605,12 +634,18 @@ def main():
                 if any(x["entry"].startswith("#") or x["kind"] == "key" for x in row["affected"]):
                     raise StoreError("some affected entries have no alias keytool can delete; fix this store by hand "
                                      "and run this check again")
-                delete_entries(path, sorted({x["entry"] for x in row["affected"]}))
-                again, _ = check(path, root)
-                left = [x for x in again if x[2] and E.classify(x[0])[0]]
-                if left:
-                    raise StoreError("affected entries remain after --delete")
+                saved = None if opts["--no-backup"] else backup(path)
+                try:
+                    delete_entries(path, sorted({x["entry"] for x in row["affected"]}))
+                    again, _ = check(path, root)
+                    if [x for x in again if x[2] and E.classify(x[0])[0]]:
+                        raise StoreError("affected entries remain after --delete")
+                except (StoreError, E.DERError, IndexError, OSError, subprocess.SubprocessError) as e:
+                    raise StoreError("%s%s" % (str(e) or e.__class__.__name__,
+                                               "; the store before --delete is at " + saved if saved else ""))
                 row["detail"] = "deleted: " + ", ".join(sorted({x["entry"] for x in row["affected"]}))
+                if saved:
+                    row["detail"] += "; backup at " + saved
                 row["affected"] = []
             if filter_out and fmt == "PEM":
                 with open(os.path.abspath(path) if not root else realpath_in(root, os.path.abspath(path)), "rb") as f:

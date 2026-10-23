@@ -17,10 +17,11 @@ client found), fall back to the offline checks. Don't mark a system SAFE on an
 inconclusive probe, and don't mark it SAFE on any check that did not exit 0.
 
 Run probes against staging, or against a one-off copy of the production artifact
-(`docker run` of the same digest), when you can. Never deploy to production
-that belongs to someone else, or restart it, without its owner's go-ahead.
-`kubectl exec` into a running pod is read-only in effect, but get the owner's OK
-first for clusters you don't own anyway.
+(`docker run` of the same digest), when you can. Never deploy to production,
+restart it, or `kubectl exec` into it without an explicit go-ahead from the
+person you are working for, and from its owner when that is someone else.
+A probe is read-only in effect, but a client's change-management process may
+still require a ticket or a window for it.
 
 ## Containers in general
 
@@ -158,8 +159,8 @@ deploy decision for the project owner, not a scan fix.
    `requests.get` (certifi) and `urllib.request` (`ssl`), and report both.
 3. Delete the route and the preview. Production deployments built before the
    platform shipped its patch keep the old runtime until a redeploy, so redeploy
-   production and probe again, with the project owner's go-ahead if it is not
-   yours.
+   production and probe again, once the person you are working for says go
+   (and the project's owner too, if that is someone else).
 
 If the runtime fails and can't be upgraded yet, ship the Node stopgap in
 `remediation.md` (drop the affected roots at startup), probe again, and record

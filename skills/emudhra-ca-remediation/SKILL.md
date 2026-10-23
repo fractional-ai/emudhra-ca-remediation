@@ -181,11 +181,15 @@ entries do. So:
    live patched-versions table against the snapshot, and lists new entries,
    changed versions, and fixes that have shipped since. It also parses the
    advisory's certificate feeds and prints `NEW CERT` for any affected
-   certificate whose key the scripts don't list yet: until you add it to
-   `emudhra_certs.py` and `probe_runtime.sh`, no script can see it. **The live data
+   certificate whose key or exact certificate the scripts don't list yet: until
+   you add its key to `emudhra_certs.py` and `probe_runtime.sh`, and its SHA-256
+   to `KEYCHAIN_DENY`, no script or Keychain step can see it. **The live data
    wins** over this skill's files and over `scan_repo.py`'s thresholds, except
    that a version is a floor: where this skill's files name a later one, the later
-   one wins. Exit 2
+   one wins. The advisory is a third party, so nothing it serves can lower a
+   floor or take a certificate out of the scripts' lists: it can only add work.
+   Certificate data from it is used only where `emudhra_certs.py` pins the
+   hash. Exit 2
    means something could not be fetched or parsed, not "no changes": read
    https://emudhra.we-have-a-problem.com/ or its source repo by hand.
 2. **Versions are floors, and behaviour is the test.** A system is fixed when its
@@ -214,10 +218,13 @@ entries do. So:
 - **Repo fixed ≠ system fixed.** A system is done only when the deployed artifact
   has been checked by digest, version or host. Everything else is "PR open" or
   "deployed, unverified".
-- **Open PRs freely; deploy only with the owner's go-ahead.** For production that
-  belongs to someone else (another team, a customer, a shared platform), its
+- **Open PRs freely; ask before touching anything running.** Before any
+  production deploy, restart, `kubectl exec`, trust-store edit or other change to
+  a running system, stop and get an explicit go-ahead from the person you are
+  working for, even for systems they own: a client's change-management process
+  may require a ticket or a window, however low-risk the change. For production
+  that belongs to someone else (another team, a customer, a shared platform), its
   owner decides when it ships. Tell them what is exposed and what the PR does.
-  Deploy and verify the systems you own.
 - **Never "fix" by weakening TLS.** That means no `verify=False`, no re-adding a
   root, and no `NODE_TLS_REJECT_UNAUTHORIZED=0`. Report any of these you find as
   a separate problem.
@@ -250,7 +257,7 @@ They are built to **fail closed**, and you should read them that way:
 |---|---|---|
 | `check_advisory.py` | What has changed in the advisory since this skill was written, including affected certificates the scripts don't know yet? Run it first. `--live` prints the whole live table, `--json` the same as JSON | Anywhere with internet |
 | `scan_repo.py PATH...` | Which pins, lockfiles, images, runtimes, vendored bundles, keystores, Secrets and binaries in this tree are affected? Statuses are VULNERABLE, ERROR, REVIEW, FIXED and INFO, and a coverage summary lists what was pruned or unreadable. Zip-family archives (jar, whl, apk) and tarballs are opened in memory and searched member by member; formats it can't open are REVIEW. Large runtime binaries are searched for embedded PEM roots and keys. `--all` includes `node_modules` and virtualenvs. `--json` for machines | Each repository checkout, and directories of build artifacts |
-| `trust_store.py STORE...` | Does this trust store hold an affected root or intermediate as an anchor? Reads PEM, DER, directories, JKS, JCEKS and PKCS12 (with keytool for a password-protected one). `system`, `java` and `python` check this machine's usual stores, including pip's vendored certifi, `jssecacerts`, and a `trustStore` set in `JAVA_TOOL_OPTIONS`. `--root DIR` for an exported image, `--delete` for a keystore, `--filter OUT` for a fixed copy of a PEM bundle | `cacert.pem`, `/etc/ssl/certs`, JDK `cacerts`, app truststores, bundles copied out of images and Lambda packages |
+| `trust_store.py STORE...` | Does this trust store hold an affected root or intermediate as an anchor? Reads PEM, DER, directories, JKS, JCEKS and PKCS12 (with keytool for a password-protected one). `system`, `java` and `python` check this machine's usual stores, including pip's vendored certifi, `jssecacerts`, and a `trustStore` set in `JAVA_TOOL_OPTIONS`. `--root DIR` for an exported image, `--delete` for a keystore (it keeps a backup unless given `--no-backup`), `--filter OUT` for a fixed copy of a PEM bundle | `cacert.pem`, `/etc/ssl/certs`, JDK `cacerts`, app truststores, bundles copied out of images and Lambda packages |
 | `go_binaries.py [DIR...]` | Which Go binaries here were built with an unpatched Go? It reads the toolchain version embedded in each binary, so it needs no Go install. That covers your own services and third-party CLIs (terraform, helm, kubectl, gh, docker, providers). Defaults to `$PATH`, where finding no Go binary at all is REVIEW, not a pass. Use `--root DIR` on an exported image filesystem so its symlinks resolve inside it | Hosts, CI runners, and filesystems exported from images |
 | `probe_runtime.sh` | Do the TLS clients *in this environment* accept a compromised chain? It covers curl, wget, Python `ssl` and certifi, node, bun, deno, ruby and java. Each connection proves which chain it was shown, so an intercepting proxy gives INCONCLUSIVE, never `ok` | Inside the deployed container, VM, CI runner or laptop: `kubectl exec -i … -- sh -s < probe_runtime.sh` |
 
@@ -421,7 +428,7 @@ One PR per repo. In it:
   26.2.2 trusts its certifi and the OS store both. An upgrade line for either is
   temporary until the image ships them. For a vendor JDK image with no patched
   release, remove the roots with
-  `trust_store.py --delete "$JAVA_HOME/lib/security/cacerts"` (temporary).
+  `trust_store.py --delete --no-backup "$JAVA_HOME/lib/security/cacerts"` (temporary).
 - Bump digest-pinned base images to a digest built after the fix. `-slim` and other
   codename-less tags moved to Debian trixie and break apt package names: pin the
   codename. A mutable tag that a vendor reuses must be verified by digest.

@@ -88,29 +88,91 @@ Filter by key, not by name, so a renamed copy can't slip through:
 ```bash
 python3 trust_store.py --filter ~/.ca-cert.pem /etc/ssl/cert.pem
 cat >> ~/.zshrc <<'EOF'
+# emudhra-ca-remediation: temporary, see "Removing the shell fix"
 export SSL_CERT_FILE="$HOME/.ca-cert.pem"
 export CURL_CA_BUNDLE="$HOME/.ca-cert.pem"
 export GIT_SSL_CAINFO="$HOME/.ca-cert.pem"
 export PIP_CERT="$HOME/.ca-cert.pem"
+# end emudhra-ca-remediation
 EOF
 ```
+
+The filtered bundle is a frozen copy of `/etc/ssl/cert.pem`, so roots that Apple
+adds or removes later never reach it. It is a stopgap. Record it in the machine's
+inventory row with the condition below, and take it out once that condition holds.
+
+#### Removing the shell fix
+
+| Change | Remove when | How to check |
+|---|---|---|
+| The `~/.zshrc` exports and `~/.ca-cert.pem` | Every client they cover refuses the chains on its own: a macOS update has fixed `/etc/ssl/cert.pem`, and certifi, Homebrew's `ca-certificates` and pip are on fixed versions | `python3 trust_store.py /etc/ssl/cert.pem` exits 0, and `env -u SSL_CERT_FILE -u CURL_CA_BUNDLE -u GIT_SSL_CAINFO -u PIP_CERT sh probe_runtime.sh` exits 0 |
+
+Older copies of this recipe wrote the exports without the marker lines. So this
+removes the two marker lines and those four exact exports from every shell
+startup file, and nothing else. It deletes the bundle only if every edit succeeded and no
+line anywhere still mentions it; otherwise it lists what is left to fix by hand:
+
+```bash
+ok=yes
+set --
+for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
+  [ -e "$f" ] || continue
+  set -- "$@" "$f"
+  # Only the two marker lines and the four exports this recipe wrote, each
+  # matched as a whole line (never a range, so a lost end marker can't take the
+  # rest of the file with it). The file is rewritten through `cat >`, so a
+  # symlinked dotfile keeps its link and mode. A copy of the original is taken
+  # first and put back if the rewrite fails partway.
+  t=$(mktemp) && b=$(mktemp) && cat "$f" > "$b" && sed -E \
+    -e '/^# emudhra-ca-remediation: temporary, see "Removing the shell fix"$/d' \
+    -e '/^# end emudhra-ca-remediation$/d' \
+    -e '/^export (SSL_CERT_FILE|CURL_CA_BUNDLE|GIT_SSL_CAINFO|PIP_CERT)="\$HOME\/\.ca-cert\.pem"$/d' \
+    "$f" > "$t" || { echo "could not edit $f"; ok=no; rm -f "$t" "$b"; continue; }
+  if cat "$t" > "$f"; then
+    rm -f "$b"
+  else
+    ok=no
+    if cat "$b" > "$f"; then echo "could not edit $f, so put it back as it was"; rm -f "$b"
+    else echo "could not edit $f or put it back: its original is in $b"; fi
+  fi
+  rm -f "$t"
+done
+unset SSL_CERT_FILE CURL_CA_BUNDLE GIT_SSL_CAINFO PIP_CERT
+grep -n 'ca-cert\.pem' "$@" < /dev/null; rc=$?
+if [ "$ok" = yes ] && [ "$rc" -eq 1 ]; then
+  rm ~/.ca-cert.pem && echo "removed ~/.ca-cert.pem"
+else
+  # Any line listed above still refers to the bundle (an if block, an alias, a
+  # different export): fix it by hand, then run this again. Any error also
+  # keeps the bundle.
+  echo "kept ~/.ca-cert.pem"
+fi
+```
+
+Then open a new shell and run `probe_runtime.sh` again. If you filtered
+`/etc/ssl/cert.pem` itself with sudo, leave it alone: the next macOS update that
+touches it puts Apple's copy back.
 
 `OPENSSL_X509_TEA_DISABLE=1` made no measurable difference when tested, so don't
 count it as a fix. The filter also drops AAA Certificate Services, so a legacy site
 whose chain reaches only AAA will fail for these clients. That is the tradeoff;
 github.com, pypi.org and Sectigo's own sites still work.
 
-For the Keychain, deny the emSign roots and the eight intermediates (all of
-them, including the AAA-signed G3B and G3C copies). Don't deny AAA Certificate
-Services itself: it anchors a large part of the web.
+For the Keychain, deny the three emSign roots and both issuances of each of the
+eight intermediates, including the AAA-signed G3B and G3C copies: 19
+certificates. Don't deny AAA Certificate Services itself: it anchors a large part
+of the web. The certificates come from the advisory's feeds, but only the ones
+whose SHA-256 is pinned in `emudhra_certs.py` are used, so a changed feed can't
+swap one out. `--keychain-pems` exits 2 and writes nothing unless it finds all 19.
 
 ```bash
-# Save each certificate's "pem" field from the advisory's feeds
-# (impacted-intermediates.json, roots.json) as its own file first
-for c in emsign-ecc-root-g3.pem emsign-root-tls-g3.pem emsign-root-cs-g3.pem em-*-g3b.pem em-*-g3c.pem; do
+curl -fsSO https://emudhra.we-have-a-problem.com/impacted-intermediates.json
+curl -fsSO https://emudhra.we-have-a-problem.com/roots.json
+python3 emudhra_certs.py --keychain-pems deny impacted-intermediates.json roots.json || exit
+for c in deny/*.pem; do
   security add-trusted-cert -r deny -k ~/Library/Keychains/login.keychain-db "$c"
 done
-security verify-cert -c em-dv-tls-g3b.pem   # must report "Trust Setting: deny"
+security verify-cert -c deny/em-dv-tls-ca-g3b-aaa.pem   # must report "Trust Setting: deny"
 ```
 
 Environment variables reach only shells. Anything launched by launchd, a GUI app or
@@ -122,8 +184,8 @@ client that fails the second run is one that never runs outside a shell.
 
 Also update Homebrew's `ca-certificates`, Docker Desktop (4.96.3), Claude Code
 (2.1.303), mise (2026.10.17), uv, and every python.org install's pip and certifi.
-`docker desktop update` restarts Docker and kills running containers, so warn
-whoever owns them first. Homebrew's `bun` formula can lag the fix: check
+`docker desktop update` restarts Docker and kills running containers, so run it
+only after the person, and whoever owns those containers, says go. Homebrew's `bun` formula can lag the fix: check
 `bun --version` against 1.4.4, not the formula's name.
 
 ### Version managers keep the old runtimes
@@ -379,7 +441,7 @@ whichever one the JVM actually reads.
 
   ```dockerfile
   COPY emudhra_certs.py trust_store.py /tmp/
-  RUN python3 /tmp/trust_store.py --delete "$JAVA_HOME/lib/security/cacerts" \
+  RUN python3 /tmp/trust_store.py --delete --no-backup "$JAVA_HOME/lib/security/cacerts" \
    && python3 /tmp/trust_store.py "$JAVA_HOME/lib/security/cacerts" \
    && rm /tmp/emudhra_certs.py /tmp/trust_store.py
   ```
@@ -387,7 +449,9 @@ whichever one the JVM actually reads.
   The script finds entries by public key, since alias names and subjects differ by
   vendor, deletes them with keytool by path (JDK 8's keytool has no `-cacerts`
   option), and re-reads the store: the build fails if keytool errors or an affected
-  entry survives. It needs Python in the build stage; in a JDK image without it,
+  entry survives. `--no-backup` is for image builds only, where a leftover copy
+  would still hold both roots. Anywhere else, leave it off and the script first
+  copies the store to `cacerts.bak-<timestamp>`. It needs Python in the build stage; in a JDK image without it,
   do the deletion in a stage that has both, or copy `cacerts` out and back. Don't hand-roll this as
   `keytool -cacerts … -delete … ; true`: on JDK 8 that fails silently and leaves both
   roots in place.
