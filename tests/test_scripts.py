@@ -305,6 +305,8 @@ class TrustStore(Tmp):
         self.assertEqual(code, 0, out)
         backups = [f for f in os.listdir(self.dir) if f.startswith("cacerts.bak-")]
         self.assertEqual(len(backups), 1, out)
+        self.assertEqual(os.stat(os.path.join(self.dir, backups[0])).st_mode & 0o777,
+                         os.stat(store).st_mode & 0o777)
         self.assertIn("backup at", out)
         self.assertEqual(run("trust_store.py", os.path.join(self.dir, backups[0]), env={"STOREPASS": "s3cret-pw"})[0], 1)
         self.assertEqual(run("trust_store.py", store, env={"STOREPASS": "s3cret-pw"})[0], 0)
@@ -688,6 +690,8 @@ class CheckAdvisory(unittest.TestCase):
         feed = {"roots.json": [{"name": "pinned", "pem": pem([BAD_ROOT]).decode()},
                                {"name": "aaa", "pem": pem([AAA_ROOT]).decode()}]}
         self.assertEqual(C.unpinned_issuances(feed), [])
+        self.assertEqual(C.missing_pins(feed), [])
+        self.assertEqual(C.missing_pins({"roots.json": feed["roots.json"][1:]}), ["root"])
         feed["roots.json"].append({"name": "cross-sign", "pem": pem([BAD_INT]).decode()})
         self.assertEqual(len(C.unpinned_issuances(feed)), 1)
         self.assertEqual(C.unknown_certificates(feed), [])

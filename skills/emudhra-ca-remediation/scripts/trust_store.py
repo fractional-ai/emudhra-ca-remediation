@@ -522,9 +522,15 @@ def check(path, root):
 
 def backup(path):
     dst = "%s.bak-%s" % (path, time.strftime("%Y%m%d%H%M%S"))
-    if os.path.lexists(dst):
+    # Created exclusively with the store's own permissions before any byte is
+    # written, so a keystore holding private keys is never readable by others.
+    try:
+        fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_EXCL, os.stat(path).st_mode & 0o600)
+    except FileExistsError:
         raise StoreError("backup %s already exists" % dst)
-    shutil.copy2(path, dst)
+    with os.fdopen(fd, "wb") as out, open(path, "rb") as src:
+        shutil.copyfileobj(src, out)
+    shutil.copystat(path, dst)
     return dst
 
 

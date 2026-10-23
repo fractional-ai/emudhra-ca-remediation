@@ -108,8 +108,8 @@ inventory row with the condition below, and take it out once that condition hold
 | The `~/.zshrc` exports and `~/.ca-cert.pem` | Every client they cover refuses the chains on its own: a macOS update has fixed `/etc/ssl/cert.pem`, and certifi, Homebrew's `ca-certificates` and pip are on fixed versions | `python3 trust_store.py /etc/ssl/cert.pem` exits 0, and `env -u SSL_CERT_FILE -u CURL_CA_BUNDLE -u GIT_SSL_CAINFO -u PIP_CERT sh probe_runtime.sh` exits 0 |
 
 Older copies of this recipe wrote the exports without the marker lines. So this
-removes the marked block and those four exact exports from every shell startup
-file, and nothing else. It deletes the bundle only if every edit succeeded and no
+removes the two marker lines and those four exact exports from every shell
+startup file, and nothing else. It deletes the bundle only if every edit succeeded and no
 line anywhere still mentions it; otherwise it lists what is left to fix by hand:
 
 ```bash
@@ -118,10 +118,13 @@ set --
 for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
   [ -e "$f" ] || continue
   set -- "$@" "$f"
-  # Only the marked block and the four exports this recipe wrote. The file is
-  # rewritten through `cat >`, so a symlinked dotfile keeps its link and mode.
+  # Only the two marker lines and the four exports this recipe wrote, each
+  # matched as a whole line (never a range, so a lost end marker can't take the
+  # rest of the file with it). The file is rewritten through `cat >`, so a
+  # symlinked dotfile keeps its link and mode.
   t=$(mktemp) && sed -E \
-    -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
+    -e '/^# emudhra-ca-remediation: temporary, see "Removing the shell fix"$/d' \
+    -e '/^# end emudhra-ca-remediation$/d' \
     -e '/^export (SSL_CERT_FILE|CURL_CA_BUNDLE|GIT_SSL_CAINFO|PIP_CERT)="\$HOME\/\.ca-cert\.pem"$/d' \
     "$f" > "$t" && cat "$t" > "$f" || { echo "could not edit $f"; ok=no; }
   rm -f "$t"

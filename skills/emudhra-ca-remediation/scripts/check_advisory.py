@@ -189,6 +189,13 @@ def unknown_certificates(feeds):
 KEYCHAIN_KEEP = {spki for spki, name in E.BAD_ROOTS.items() if name == "AAA Certificate Services"}
 
 
+def missing_pins(feeds):
+    """KEYCHAIN_DENY certificates the feeds no longer list. The certificate stays
+    compromised, but --keychain-pems can't find it there any more."""
+    seen = {E.cert_sha256(der) for _, der, _ in feed_certificates(feeds)}
+    return sorted(stem for fp, stem in E.KEYCHAIN_DENY.items() if fp not in seen)
+
+
 def unpinned_issuances(feeds):
     """Affected certificates whose key is known but whose exact certificate is
     not in KEYCHAIN_DENY: a new issuance or cross-sign of a known key. Keychain
@@ -215,14 +222,18 @@ def main():
     changed = failed = False
     try:
         feeds = {f: json.loads(get(URL + f)) for f in FEEDS}
-        new, reissued = unknown_certificates(feeds), unpinned_issuances(feeds)
+        new, reissued, gone = unknown_certificates(feeds), unpinned_issuances(feeds), missing_pins(feeds)
     except Exception as e:
         print("ERROR      could not check the certificate feeds (%s): %s" % (", ".join(FEEDS), e))
         failed = True
-        new = reissued = []
+        new = reissued = gone = []
     for item in new:
         print("NEW CERT   %s: add its SPKI and SKI to emudhra_certs.py (and probe_runtime.sh), and its "
               "SHA-256 to KEYCHAIN_DENY; until then the tools cannot see it" % item)
+        changed = True
+    for stem in gone:
+        print("REMOVED    pinned certificate %s is no longer in the feeds. It is still compromised: keep it "
+              "denied, and find out why it was dropped before trusting the feeds again" % stem)
         changed = True
     for item in reissued:
         print("NEW CERT   %s: a new certificate for a known key; add its SHA-256 to KEYCHAIN_DENY in "
