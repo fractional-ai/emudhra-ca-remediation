@@ -36,9 +36,9 @@ They can read and alter everything that client sends and receives.
    Windows, and Android 13 and older all trust it. (Stock Ubuntu 24.04 and 26.04
    and Amazon Linux 2023 refused the AAA chains in field tests; probe all 12
    anyway.)
-2. It **blocks the intermediates' public keys**, as patched Go, Node, rustls-webpki
-   and the CPython denylist do, as JDK `blocked.certs` does, and as Windows'
-   Disallowed store and Apple's Valid DB do.
+2. It **blocks the intermediates' public keys**, as patched Go, Node and
+   rustls-webpki do, as JDK `blocked.certs` does, and as Windows' Disallowed
+   store and Apple's Valid DB do.
 3. It checks revocation and **fails closed**. Almost nothing outside browsers does,
    and macOS soft-fails on the G3B chains.
 4. It **enforces Certificate Transparency**. Browsers do; almost nothing else does.
@@ -173,7 +173,7 @@ what is actually running.
 
 ## Keeping current
 
-Everything version-shaped in this skill is a snapshot from 2026-10-22. The
+Everything version-shaped in this skill is a snapshot from 2026-10-23. The
 vulnerability and the five questions don't age; version numbers and "pending"
 entries do. So:
 
@@ -195,9 +195,10 @@ entries do. So:
    Any later release on a fixed line is fine. A release line newer than the
    snapshot is presumed fixed, but confirm it with a probe.
 3. **Re-check whatever was open.** As of the snapshot, Erlang certifi and Bottlerocket
-   were pending, and the advisory still listed Bun as pending after Bun 1.4.4
-   shipped the fix. The OpenJDK advisory and the tracker disagreed on
-   Java builds. The CPython releases were announced but not yet confirmed. Apple's
+   were pending (with Godot), and the advisory still listed Composer's ca-bundle as
+   pending after 1.4.16 and 1.6.0 shipped bundles without the emSign root. The
+   OpenJDK advisory and the tracker disagreed on Java builds. The CPython releases
+   fix the bundled pip, not `ssl`. Apple's
    OCSP soft-fail was unfixed. Each of these may have changed, so look before
    repeating it.
 4. **The test hosts may go offline one day.** The offline checks don't need

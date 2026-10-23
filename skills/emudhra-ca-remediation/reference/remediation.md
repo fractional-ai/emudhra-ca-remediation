@@ -2,7 +2,7 @@
 
 For each stack: **where its trust decision comes from**, the **fixed version**, the
 **fix**, and **how to confirm it in the deployed artifact**. Fixed versions are from
-https://emudhra.we-have-a-problem.com/ as of 2026-10-22, and they are minimums:
+https://emudhra.we-have-a-problem.com/ as of 2026-10-23, and they are minimums:
 any later release on the same line is fine. Run `scripts/check_advisory.py`
 before relying on them. Versions are floors: where the live table and this file
 differ, the later version wins, and the live table wins for anything marked
@@ -24,6 +24,7 @@ certifi at build time.
 | Gentoo | 20260816.3.125 |
 | Chainguard / Wolfi | 20260909-r3 |
 | FreeBSD | caroot 15.1-RELEASE-p6, 14.5-RELEASE-p3, 14.4-RELEASE-p12; ca_root_nss 1.131.1 |
+| OpenBSD | -current (`cert.pem` rev 1.37), and the 8.0 and 7.9 errata |
 | NSS | 3.131.1 |
 | curl's `cacert.pem` | 2026-10-20 |
 | Homebrew `ca-certificates` | 2026-09-25_1 |
@@ -179,7 +180,7 @@ on a fixed runtime and treat the binary as exposed until then.
 | uv | 0.13.4 | bundled webpki-roots unless `UV_SYSTEM_CERTS=true` / `--native-tls` |
 | pixi | 0.82.1 | |
 | sigstore | 4.5.1 | |
-| CPython `ssl` | 3.15.1, 3.14.9 and 3.13.17 were announced with an SPKI denylist (gh-160042). Field runs disagreed on whether 3.14.9 actually blocks the keys, so count it only when the probe's `python-ssl-default` line shows `ok` with an unpatched OS store | the OS store, through OpenSSL |
+| CPython `ssl` | 3.15.1, 3.14.9 and 3.13.17 shipped 2026-10-21. Their release notes describe one fix: the bundled pip is now 26.2.2 (with certifi 2026.10.19), so `ensurepip` and new venvs get it. They describe no change to `ssl`, which still trusts the OS store. Field runs disagreed on whether 3.14.9 blocks the keys, so count it only when the probe's `python-ssl-default` line shows `ok` with an unpatched OS store | the OS store, through OpenSSL |
 
 To fix:
 
@@ -196,7 +197,11 @@ To fix:
   vendored bundle with `trust_store.py --filter` and check it again; record it as
   a mitigation, not a fix.
 - Every existing venv carries its own pip and certifi: dev machines, CI caches,
-  AMIs, and Lambda deployment packages and layers, which vendor certifi.
+  AMIs, and Lambda deployment packages and layers, which vendor certifi. A venv
+  made by a Python older than 3.15.1, 3.14.9 or 3.13.17 starts with a vulnerable
+  pip, so upgrade pip right after `python -m venv`.
+- conda 26.9.4, sigstore 4.5.1, and `pypa/gh-action-pypi-publish` 1.14.3 in
+  release workflows.
 - The AWS, Google Cloud and Azure CLIs are frozen Python apps with their own
   certifi (or botocore bundle). Update the CLI itself; the system Python's certifi
   doesn't reach them. Point `scan_repo.py` at the CLI's install directory to
