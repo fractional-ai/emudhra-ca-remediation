@@ -1,10 +1,17 @@
 # emudhra-ca-remediation
 
-An agent skill for the October 2026 eMudhra/emSign intermediate CA compromise. It helps an agent find every system you run or ship that trusts the compromised intermediates, patch it, and prove that the deployed artifact (not just the repo) rejects them. [`SKILL.md`](skills/emudhra-ca-remediation/SKILL.md) is the entry point. The reference docs and the fail-closed scripts sit next to it.
+An agent skill for remediating systems exposed to the October 2026 eMudhra/emSign intermediate CA compromise. It helps your agent find every system you run or software you ship that trusts the compromised intermediates, patch it, and verify that the deployed artifact rejects them. [`SKILL.md`](skills/emudhra-ca-remediation/SKILL.md) is the entry point.
+
+> [!TIP]
+> You only need to run this once, so instead of installing it consider running just once:
+> ```sh
+> npx skills use fractional-ai/emudhra-ca-remediation@emudhra-ca-remediation --agent claude-code
+> ```
+> Or just point your agent to this repo, it can figure out what to do.
 
 ## Install
 
-Patch the client you install with first. `npx` and `git` fetch over the same kind of TLS client this skill is about, so on an unpatched Node, prefer `git clone`.
+**Patch the client you install with first.** `npx` and `git` fetch over the same kind of TLS client this skill is about, so on an unpatched Node, prefer `git clone`.
 
 With [skills](https://github.com/vercel-labs/skills) (Claude Code, Codex, Cursor, OpenCode and others):
 
