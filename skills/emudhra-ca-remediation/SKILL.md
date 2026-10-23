@@ -181,8 +181,9 @@ entries do. So:
    live patched-versions table against the snapshot, and lists new entries,
    changed versions, and fixes that have shipped since. It also parses the
    advisory's certificate feeds and prints `NEW CERT` for any affected
-   certificate whose key the scripts don't list yet: until you add it to
-   `emudhra_certs.py` and `probe_runtime.sh`, no script can see it. **The live data
+   certificate whose key or exact certificate the scripts don't list yet: until
+   you add its key to `emudhra_certs.py` and `probe_runtime.sh`, and its SHA-256
+   to `KEYCHAIN_DENY`, no script or Keychain step can see it. **The live data
    wins** over this skill's files and over `scan_repo.py`'s thresholds, except
    that a version is a floor: where this skill's files name a later one, the later
    one wins. The advisory is a third party, so nothing it serves can lower a

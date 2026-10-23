@@ -221,8 +221,8 @@ def main():
         failed = True
         new = reissued = []
     for item in new:
-        print("NEW CERT   %s: add its SPKI and SKI to emudhra_certs.py (and probe_runtime.sh); "
-              "until then the tools cannot see it" % item)
+        print("NEW CERT   %s: add its SPKI and SKI to emudhra_certs.py (and probe_runtime.sh), and its "
+              "SHA-256 to KEYCHAIN_DENY; until then the tools cannot see it" % item)
         changed = True
     for item in reissued:
         print("NEW CERT   %s: a new certificate for a known key; add its SHA-256 to KEYCHAIN_DENY in "
