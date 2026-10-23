@@ -139,8 +139,8 @@ def parse_table(page):
     p.close()
     # The page has shipped this as one table and, since 2026-10-23, as one per
     # category (OS, bundles, runtimes, tools). Read every one with the header.
-    tables = [t for t in p.tables if t["id"] == "patched"] or \
-        [t for t in p.tables if t["rows"] and [c.lower() for c in t["rows"][0][:2]] == ["software", "patched version"]]
+    tables = [t for t in p.tables if t["id"] == "patched"
+              or t["rows"] and [c.lower() for c in t["rows"][0][:2]] == ["software", "patched version"]]
     if not tables:
         raise ValueError("found no patched-versions table; the layout changed, read it by hand")
     rows = []

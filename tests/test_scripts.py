@@ -583,6 +583,7 @@ class CheckAdvisory(unittest.TestCase):
                         + "".join("<tr><td>%s</td><td>%s</td></tr>" % kv for kv in items[i:i + 10]) + "</table>"
                         for i in range(0, len(items), 10))
         self.assertEqual(C.parse_table('<table id="results"><tr><th>CA</th></tr></table>' + split), C.SNAPSHOT)
+        self.assertEqual(C.parse_table(split.replace('class="patched"', 'id="patched"', 1)), C.SNAPSHOT)
         with self.assertRaises(ValueError):
             C.parse_table(split + split)
         with self.assertRaises(ValueError):
