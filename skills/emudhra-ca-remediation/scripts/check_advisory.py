@@ -34,51 +34,58 @@ import emudhra_certs as E  # noqa: E402
 URL = "https://emudhra.we-have-a-problem.com/"
 FEEDS = ("impacted-intermediates.json", "roots.json")
 SOURCE = "https://github.com/galadran/we-have-a-problem.com"
-SNAPSHOT_DATE = "2026-10-22"
+SNAPSHOT_DATE = "2026-10-23"
 SNAPSHOT = {
-    "Ubuntu ca-certificates": "20260816ubuntu0.22.04.1, 20260816ubuntu0.24.04.1, 20260816ubuntu0.26.04.1, 20260816ubuntu0.26.10.1",
+    "Alpine Linux ca-certificates": "20261020-r0",
+    "Arch Linux ca-certificates-mozilla": "3.131.1-1",
+    "Chainguard ca-certificates": "20260909-r3",
     "Debian ca-certificates": "20250419~deb12u2, 20250419+deb13u1, 20260816+nmu1",
     "Devuan ca-certificates": "Same as Debian",
-    "Arch Linux ca-certificates-mozilla": "3.131.1-1",
-    "Gentoo ca-certificates": "20260816.3.125",
     "Fedora ca-certificates": "2026.2.92_v9.0.319",
-    "FreeBSD caroot": "15.1-RELEASE-p6, 14.5-RELEASE-p3, 14.4-RELEASE-p12",
     "FreeBSD ca_root_nss": "1.131.1",
+    "FreeBSD caroot": "15.1-RELEASE-p6, 14.5-RELEASE-p3, 14.4-RELEASE-p12",
     "Freedesktop SDK": "25.08.19, 26.08.3",
-    "Chainguard ca-certificates": "20260909-r3",
-    "Alpine Linux ca-certificates": "20261020-r0",
+    "Gentoo ca-certificates": "20260816.3.125",
     "GNU Guix": "7608a99",
-    "OmniOS web/ca-bundle": "r151054by, r151056ay, r151058y",
-    "Bottlerocket": "pending",
-    "NSS": "3.131.1",
-    "curl CA bundle": "2026-10-20",
-    "Cloudflare CFSSL trust store": "2026.10.1",
     "Homebrew ca-certificates": "2026-09-25_1",
-    "Go": "1.27.3, 1.26.10",
-    "Java": "27.0.1.0.2, 25.0.5.0.2, 21.0.13.0.2, 17.0.21.0.2, 11.0.33.0.2, 8u511 (OpenJDK, Oracle JDK)",
-    "Node.js": "22.23.4, 24.22.1, 26.12.1",
+    "OmniOS web/ca-bundle": "r151054by, r151056ay, r151058y",
+    "OpenBSD": "current 8.0 7.9",
+    "Ubuntu ca-certificates": "20260816ubuntu0.22.04.1, 20260816ubuntu0.24.04.1, 20260816ubuntu0.26.04.1, 20260816ubuntu0.26.10.1",
+    "Bottlerocket": "pending",
+    "Cloudflare CFSSL trust store": "2026.10.1",
+    "curl CA bundle": "2026-10-20",
+    "Elixir castore": "1.0.22",
+    "NSS": "3.131.1",
+    "Perl Mozilla::CA": "20261020",
     "Python certifi": "2026.10.19",
-    "pip": "26.2.2",
-    "uv": "0.13.4",
-    "pixi": "0.82.1",
     "Rust rustls-webpki": "0.103.16",
     "Rust webpki-roots / webpki-root-certs": "1.0.10",
-    "Rustup": "1.29.2",
-    "Electron": "44.9.1, 43.8.1, 42.11.16",
-    "Bun": "pending",
-    "Claude Code": "2.1.303",
-    "Composer ca-bundle": "1.4.16, 1.6.0",
-    "Elixir castore": "1.0.22",
+    "Composer ca-bundle": "pending (1.4.16, 1.6.0)",
     "Erlang certifi": "pending",
-    "mise": "2026.10.17",
-    "Perl Mozilla::CA": "20261020",
+    "Bun": "1.4.4",
     "Deno": "2.9.8",
+    "Electron": "44.9.1, 43.8.1, 42.11.16",
+    "Go": "1.27.3, 1.26.10",
+    "Java": "27.0.1.0.2, 25.0.5.0.2, 21.0.13.0.2, 17.0.21.0.2, 11.0.33.0.2, 8u511 (OpenJDK, Oracle JDK)",
+    "Node.js": "26.12.1, 24.22.1, 22.23.4",
+    "Python": "3.15.1, 3.14.9, 3.13.17",
+    "ArgoCD": "3.3.18",
+    "Claude Code": "2.1.303",
     "Docker Desktop": "4.96.2",
+    "mise": "2026.10.17",
+    "pip": "26.2.2",
+    "pixi": "0.82.1",
+    "pypi-publish GitHub Action": "1.14.3",
+    "Rustup": "1.29.2",
+    "uv": "0.13.4",
+    "Conda": "26.9.4",
+    "Godot": "pending",
 }
 # Fixes confirmed from the vendor's own release notes before the advisory's table
 # caught up. Each is printed as AHEAD while the table still says "pending".
 AHEAD = {
-    "Bun": "1.4.4 (https://bun.sh/blog/bun-v1.4.4, 2026-10-22: roots updated to NSS 3.131.1)",
+    "Composer ca-bundle": "1.4.16 and 1.6.0 (on Packagist 2026-10-20; both bundles drop emSign ECC Root CA - G3, "
+                          "checked with trust_store.py)",
 }
 
 
@@ -130,13 +137,18 @@ def parse_table(page):
     p = Tables()
     p.feed(page)
     p.close()
+    # The page has shipped this as one table and, since 2026-10-23, as one per
+    # category (OS, bundles, runtimes, tools). Read every one with the header.
     tables = [t for t in p.tables if t["id"] == "patched"] or \
         [t for t in p.tables if t["rows"] and [c.lower() for c in t["rows"][0][:2]] == ["software", "patched version"]]
-    if len(tables) != 1:
-        raise ValueError("found %d patched-versions tables; the layout changed, read it by hand" % len(tables))
-    rows = tables[0]["rows"]
-    if rows and [c.lower() for c in rows[0][:2]] == ["software", "patched version"]:
-        rows = rows[1:]
+    if not tables:
+        raise ValueError("found no patched-versions table; the layout changed, read it by hand")
+    rows = []
+    for t in tables:
+        r = t["rows"]
+        if r and [c.lower() for c in r[0][:2]] == ["software", "patched version"]:
+            r = r[1:]
+        rows += r
     bad = [r for r in rows if len(r) != 2 or not r[0]]
     if bad or not rows:
         raise ValueError("patched-versions table has %d rows, %d of them not two cells; read it by hand"
@@ -200,7 +212,7 @@ def main():
         if was is None:
             print("NEW        %s: %s" % (name, now))
         elif was != now:
-            tag = "SHIPPED   " if was == "pending" and now != "pending" else "CHANGED   "
+            tag = "SHIPPED   " if was.startswith("pending") and not now.startswith("pending") else "CHANGED   "
             print("%s %s: %s  (snapshot: %s)" % (tag, name, now, was))
         else:
             continue
@@ -210,9 +222,9 @@ def main():
             print("REMOVED    %s (snapshot: %s)" % (name, SNAPSHOT[name]))
             changed = True
     for name, note in AHEAD.items():
-        if live.get(name) == "pending":
+        if live.get(name, "").startswith("pending"):
             print("AHEAD      %s: the table says pending, but the vendor shipped %s" % (name, note))
-    still = [n for n, v in live.items() if v == "pending" and n not in AHEAD]
+    still = [n for n, v in live.items() if v.startswith("pending") and n not in AHEAD]
     if still:
         print("PENDING    " + ", ".join(still))
     if changed:

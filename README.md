@@ -32,7 +32,7 @@ The scripts need Python 3.8+ (PyYAML for YAML files) and POSIX sh. Run the tests
 
 ## Status
 
-Versions and dates are a snapshot from 2026-10-22. Run `check_advisory.py` first, every time, to see what has changed since: https://emudhra.we-have-a-problem.com/
+Versions and dates are a snapshot from 2026-10-23. Run `check_advisory.py` first, every time, to see what has changed since: https://emudhra.we-have-a-problem.com/
 
 This is shared as is and maintained on a best-effort basis. Issues about anything the skill gets wrong or misses are welcome.
 

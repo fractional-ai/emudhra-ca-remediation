@@ -1,6 +1,6 @@
 # The eMudhra intermediate CA compromise (October 2026)
 
-Snapshot as of 2026-10-22. Re-check the advisory's patched-versions table before
+Snapshot as of 2026-10-23. Re-check the advisory's patched-versions table before
 relying on a "pending" entry: https://emudhra.we-have-a-problem.com/
 
 ## What happened

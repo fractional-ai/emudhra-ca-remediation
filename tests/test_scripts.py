@@ -577,6 +577,14 @@ class CheckAdvisory(unittest.TestCase):
                 + "".join('<tr><td>%s</td><td><a href="x">%s</a></td></tr>' % (k, v.replace(", ", ",<br>"))
                           for k, v in C.SNAPSHOT.items()) + "</tbody></table>")
         self.assertEqual(C.parse_table(page), C.SNAPSHOT)
+        # Since 2026-10-23 the page splits the table by category.
+        items = list(C.SNAPSHOT.items())
+        split = "".join('<table class="patched"><thead><tr><th>Software</th><th>Patched version</th></tr></thead>'
+                        + "".join("<tr><td>%s</td><td>%s</td></tr>" % kv for kv in items[i:i + 10]) + "</table>"
+                        for i in range(0, len(items), 10))
+        self.assertEqual(C.parse_table('<table id="results"><tr><th>CA</th></tr></table>' + split), C.SNAPSHOT)
+        with self.assertRaises(ValueError):
+            C.parse_table(split + split)
         with self.assertRaises(ValueError):
             C.parse_table("<table id='other'></table>")
         with self.assertRaises(ValueError):
