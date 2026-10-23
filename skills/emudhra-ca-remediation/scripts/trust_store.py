@@ -634,8 +634,9 @@ def main():
                     again, _ = check(path, root)
                     if [x for x in again if x[2] and E.classify(x[0])[0]]:
                         raise StoreError("affected entries remain after --delete")
-                except StoreError as e:
-                    raise StoreError("%s%s" % (e, "; the store before --delete is at " + saved if saved else ""))
+                except (StoreError, E.DERError, IndexError, OSError, subprocess.SubprocessError) as e:
+                    raise StoreError("%s%s" % (str(e) or e.__class__.__name__,
+                                               "; the store before --delete is at " + saved if saved else ""))
                 row["detail"] = "deleted: " + ", ".join(sorted({x["entry"] for x in row["affected"]}))
                 if saved:
                     row["detail"] += "; backup at " + saved

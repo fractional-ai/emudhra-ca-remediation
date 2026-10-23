@@ -99,6 +99,16 @@ def jks(entries):
     return out + hashlib.sha1(out).digest()
 
 
+def working_keytool():
+    """keytool, if it runs. macOS ships a /usr/bin/keytool stub that fails without a JDK."""
+    kt = shutil.which("keytool")
+    try:
+        ok = kt and subprocess.run([kt, "-help"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    return kt if ok else None
+
+
 def run(script, *args, env=None, cwd=None, timeout=300):
     cmd = ([sys.executable, os.path.join(SCRIPTS, script)] if script.endswith(".py")
            else ["sh", os.path.join(SCRIPTS, script)]) + list(args)
@@ -282,9 +292,9 @@ class TrustStore(Tmp):
         self.assertIsNone(T.keytool_entries(pem([BAD_ROOT]), [BAD_ROOT]))
 
     def test_delete_keeps_a_backup_and_hides_the_password(self):
-        kt = shutil.which("keytool")
+        kt = working_keytool()
         if not kt:
-            self.skipTest("no keytool")
+            self.skipTest("no working keytool")
         store = os.path.join(self.dir, "cacerts")
         for alias, d in (("clean", CLEAN[0]), ("emsign", BAD_ROOT)):
             r = subprocess.run([kt, "-importcert", "-noprompt", "-alias", alias, "-file", self.write(alias + ".der", d),
@@ -302,9 +312,9 @@ class TrustStore(Tmp):
             self.assertNotIn('"-storepass", pw', f.read())
 
     def test_delete_no_backup(self):
-        kt = shutil.which("keytool")
+        kt = working_keytool()
         if not kt:
-            self.skipTest("no keytool")
+            self.skipTest("no working keytool")
         store = os.path.join(self.dir, "cacerts")
         r = subprocess.run([kt, "-importcert", "-noprompt", "-alias", "emsign", "-file", self.write("r.der", BAD_ROOT),
                             "-keystore", store, "-storetype", "PKCS12", "-storepass", "changeit"],

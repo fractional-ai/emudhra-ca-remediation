@@ -107,9 +107,18 @@ inventory row with the condition below, and take it out once that condition hold
 |---|---|---|
 | The `~/.zshrc` exports and `~/.ca-cert.pem` | Every client they cover refuses the chains on its own: a macOS update has fixed `/etc/ssl/cert.pem`, and certifi, Homebrew's `ca-certificates` and pip are on fixed versions | `python3 trust_store.py /etc/ssl/cert.pem` exits 0, and `env -u SSL_CERT_FILE -u CURL_CA_BUNDLE -u GIT_SSL_CAINFO -u PIP_CERT sh probe_runtime.sh` exits 0 |
 
+Older copies of this recipe wrote the exports without the marker lines, so remove
+any line that points at the bundle as well as the marked block, and check every
+shell file before deleting the bundle:
+
 ```bash
-sed -i '' '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' ~/.zshrc
-rm ~/.ca-cert.pem
+for f in ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile; do
+  [ -f "$f" ] && sed -i '' -e '/^# emudhra-ca-remediation: temporary/,/^# end emudhra-ca-remediation$/d' \
+    -e '/\.ca-cert\.pem/d' "$f"
+done
+unset SSL_CERT_FILE CURL_CA_BUNDLE GIT_SSL_CAINFO PIP_CERT
+grep -n 'ca-cert\.pem' ~/.zshrc ~/.zprofile ~/.zshenv ~/.bash_profile ~/.bashrc ~/.profile 2>/dev/null \
+  || rm ~/.ca-cert.pem   # deletes the bundle only once nothing refers to it
 ```
 
 Then open a new shell and run `probe_runtime.sh` again. If you filtered
